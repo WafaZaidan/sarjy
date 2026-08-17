@@ -17,7 +17,7 @@ export async function getOrCreateConversation(): Promise<Promise<number> | void>
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      console.log('user isnt authenticated')
+        console.log('user isnt authenticated')
         return
     }
 
@@ -36,9 +36,11 @@ export async function getOrCreateConversation(): Promise<Promise<number> | void>
         return existingConversation.id;
     }
 
+
     const {data: newConversation, error: createError} = await supabase.from("conversations").insert({
         user_id: user.id,
-        title: "Sarjy Converstion"
+        title: "Sarjy Converstion",
+        created_at: new Date()
     }).select("id").single()
     if (createError) {
         throw new Error(createError.message);

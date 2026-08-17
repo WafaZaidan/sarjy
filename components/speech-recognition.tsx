@@ -6,6 +6,7 @@ import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
 import {askLlm} from "@/lib/api/chat-client";
+import {getOrCreateConversation} from "@/lib/db/conversations";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -15,6 +16,7 @@ export function SpeechRecognitionCycle() {
     const [assistantReply, setAssistantReply] = useState<string>("");
     const [status, setStatus] = useState<Status>("idle");
     const [supported, setSupported] = useState(true);
+
 
 
     function speak(text: string) {
@@ -44,6 +46,8 @@ export function SpeechRecognitionCycle() {
             if (httpResponse) {
                 setAssistantReply(httpResponse)
                 speak(httpResponse)
+               const convo =await getOrCreateConversation()
+                console.log('convo', convo)
             } else {
                 setStatus("idle")
             }
