@@ -35,6 +35,5 @@ export async function POST(request: Request) {
     } catch (error) {
         console.log('Oh no something went wrong', error)
     }
-    return NextResponse.json()
 
 }

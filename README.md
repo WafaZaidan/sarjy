@@ -8,8 +8,12 @@ This app has the following abilities
 
 Next:
 1. Output response using voice
+2. Pass response id in llm calls to keep short memory
+3. Save conversation in db - long term memory
 
 Nice to have:
 1. Show speech-loading UI while the browser is listening to give instant feedback to the user after they speak  
+2. ability for user to choose llm model
+
 
 

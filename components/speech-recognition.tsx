@@ -3,9 +3,9 @@
 import {useEffect, useRef, useState} from "react";
 
 export function SpeechRecognitionCycle() {
-    const recognitionRef = useRef<any>(null);
+    const recognitionRef = useRef<SpeechRecognition | null>(null);
     const [transcript, setTranscript] = useState("");
-    const [assistantReply, setAssistantReply] = useState("");
+    const [assistantReply, setAssistantReply] = useState<string>("");
 
     async function askLlm(message: string) {
         try {
@@ -19,7 +19,10 @@ export function SpeechRecognitionCycle() {
             if (!httpResponse.ok) {
                 throw new Error(data.error || "Request failed");
             }
-            setAssistantReply(data.message)
+            if (data.message) {
+                setAssistantReply(data.message)
+
+            }
 
         } catch (e) {
             console.log("Something went wrong", e);
@@ -33,7 +36,7 @@ export function SpeechRecognitionCycle() {
 
         if (!Recognition) return;
         const recognition = new Recognition();
-        recognition.onresult = (event: any) => {
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
             const message = event.results[0][0].transcript
 
             setTranscript(message);
