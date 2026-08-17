@@ -5,7 +5,7 @@ import {Mic, MicOff, Loader2, Volume2, Pause, Play} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
-import {askLlm} from "@/lib/api/chat";
+import {askLlm} from "@/lib/api/chat-client";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -17,8 +17,7 @@ export function SpeechRecognitionCycle() {
     const [supported, setSupported] = useState(true);
 
 
-
-    async function speak(text: string) {
+    function speak(text: string) {
         if (!('speechSynthesis' in window)) {
             console.log('error')
             setStatus("idle");
@@ -36,22 +35,22 @@ export function SpeechRecognitionCycle() {
         window.speechSynthesis.speak(utterance)
 
     }
-    async function handleRecognisedSpeech(message:string){
-        try{
+
+    async function handleRecognisedSpeech(message: string) {
+        try {
             setStatus("thinking");
+            const httpResponse = await askLlm(message)
 
-           const httpResponse =  await askLlm(message)
-
-            if (httpResponse){
+            if (httpResponse) {
                 setAssistantReply(httpResponse)
-                await speak(httpResponse)
-            }else {
+                speak(httpResponse)
+            } else {
                 setStatus("idle")
             }
-        }
-        catch(e){
+        } catch (e) {
             console.log("Something went wrong", e);
-            setStatus("idle");        }
+            setStatus("idle");
+        }
     }
 
     useEffect(() => {
@@ -63,8 +62,10 @@ export function SpeechRecognitionCycle() {
             return;
         }
         const recognition = new Recognition();
+
         recognition.onresult = async (event: SpeechRecognitionEvent) => {
             const message = event.results[0][0].transcript
+            console.log('message?', message)
 
             setTranscript(message);
             await handleRecognisedSpeech(message)
@@ -76,7 +77,7 @@ export function SpeechRecognitionCycle() {
         recognitionRef.current = recognition;
 
         return () => recognition.abort();
-    });
+    }, []);
 
     const isListening = status === "listening";
 
@@ -177,7 +178,8 @@ export function SpeechRecognitionCycle() {
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             Sarjy
                         </p>
-                        <div className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
+                        <div
+                            className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
                             {assistantReply || (
                                 <span className="text-muted-foreground">—</span>
                             )}

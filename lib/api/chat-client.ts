@@ -13,6 +13,4 @@ export async function askLlm(message: string) {
         throw new Error("Sarjy returned no message");
     }
     return data.message;
-
-
 }
