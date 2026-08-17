@@ -21,12 +21,27 @@ export function SpeechRecognitionCycle() {
             }
             if (data.message) {
                 setAssistantReply(data.message)
-
+                await speak(data.message)
             }
 
         } catch (e) {
             console.log("Something went wrong", e);
         }
+
+    }
+
+    async function speak(text: string) {
+        if (!('speechSynthesis' in window)) {
+            console.log('error')
+            return
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.lang = "en-GB";
+        utterance.rate = 1
+        utterance.pitch = 1
+        utterance.volume = 1
+        window.speechSynthesis.speak(utterance)
 
     }
 
