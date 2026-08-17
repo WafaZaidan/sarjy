@@ -5,6 +5,7 @@ import {Mic, MicOff, Loader2, Volume2, Pause, Play} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
+import {askLlm} from "@/lib/api/chat";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -15,32 +16,7 @@ export function SpeechRecognitionCycle() {
     const [status, setStatus] = useState<Status>("idle");
     const [supported, setSupported] = useState(true);
 
-    async function askLlm(message: string) {
-        try {
-            setStatus("thinking");
-            const httpResponse = await fetch("/api/chat", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({message}),
-            })
-            const data: { message?: string; error?: string } =
-                await httpResponse.json();
-            if (!httpResponse.ok) {
-                throw new Error(data.error || "Request failed");
-            }
-            if (data.message) {
-                setAssistantReply(data.message)
-                await speak(data.message)
-            } else {
-                setStatus("idle");
-            }
 
-        } catch (e) {
-            console.log("Something went wrong", e);
-            setStatus("idle");
-        }
-
-    }
 
     async function speak(text: string) {
         if (!('speechSynthesis' in window)) {
@@ -60,6 +36,23 @@ export function SpeechRecognitionCycle() {
         window.speechSynthesis.speak(utterance)
 
     }
+    async function handleRecognisedSpeech(message:string){
+        try{
+            setStatus("thinking");
+
+           const httpResponse =  await askLlm(message)
+
+            if (httpResponse){
+                setAssistantReply(httpResponse)
+                await speak(httpResponse)
+            }else {
+                setStatus("idle")
+            }
+        }
+        catch(e){
+            console.log("Something went wrong", e);
+            setStatus("idle");        }
+    }
 
     useEffect(() => {
         const Recognition =
@@ -70,11 +63,11 @@ export function SpeechRecognitionCycle() {
             return;
         }
         const recognition = new Recognition();
-        recognition.onresult = (event: SpeechRecognitionEvent) => {
+        recognition.onresult = async (event: SpeechRecognitionEvent) => {
             const message = event.results[0][0].transcript
 
             setTranscript(message);
-            askLlm(message)
+            await handleRecognisedSpeech(message)
         };
         recognition.onstart = () => setStatus("listening");
         recognition.onend = () => setStatus((s) => (s === "listening" ? "idle" : s));
@@ -83,7 +76,7 @@ export function SpeechRecognitionCycle() {
         recognitionRef.current = recognition;
 
         return () => recognition.abort();
-    }, []);
+    });
 
     const isListening = status === "listening";
 
