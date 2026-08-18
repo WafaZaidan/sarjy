@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect, useRef, useState} from "react";
-import {Mic, MicOff, Loader2, Volume2, Pause, Play, Plus, Trash2} from "lucide-react";
+import {Mic, MicOff, Volume2, Pause, Play, Plus, Trash2, Square} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
@@ -42,6 +42,10 @@ export function SpeechRecognitionCycle() {
     // so facts mentioned in one chat are available when a new response chain starts
     // in a different chat.
     const allMessagesRef = useRef<ChatMessage[]>([]);
+    // Set right before we programmatically cancel speech (new chat / switch / delete),
+    // so the utterance's resulting "error" event doesn't auto-restart the mic.
+    const suppressAutoListenRef = useRef(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [conversations, setConversations] = useState<ConversationSummary[]>([]);
     const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
@@ -68,12 +72,21 @@ export function SpeechRecognitionCycle() {
         setMessages(history);
     }
 
+    function cancelSpeechAndListening() {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            suppressAutoListenRef.current = true;
+        }
+        recognitionRef.current?.abort();
+        window.speechSynthesis.cancel();
+        abortControllerRef.current?.abort();
+        abortControllerRef.current = null;
+    }
+
     async function handleSelectConversation(id: number) {
         if (id === activeConversationId) {
             return;
         }
-        recognitionRef.current?.stop();
-        window.speechSynthesis.cancel();
+        cancelSpeechAndListening();
         setStatus("idle");
         await openConversation(id);
     }
@@ -87,8 +100,7 @@ export function SpeechRecognitionCycle() {
         setConversations(remaining);
 
         if (id === activeConversationId) {
-            recognitionRef.current?.stop();
-            window.speechSynthesis.cancel();
+            cancelSpeechAndListening();
             setStatus("idle");
             if (remaining.length > 0) {
                 await openConversation(remaining[0].id);
@@ -99,8 +111,7 @@ export function SpeechRecognitionCycle() {
     }
 
     async function handleNewChat() {
-        recognitionRef.current?.stop();
-        window.speechSynthesis.cancel();
+        cancelSpeechAndListening();
         const id = await createConversation();
         conversationIdRef.current = id ?? null;
         lastResponseIdRef.current = null;
@@ -116,6 +127,11 @@ export function SpeechRecognitionCycle() {
     }
 
     function resumeListening() {
+        if (suppressAutoListenRef.current) {
+            suppressAutoListenRef.current = false;
+            setStatus("idle");
+            return;
+        }
         if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
             setTimeout(resumeListening, 100);
             return;
@@ -168,11 +184,15 @@ export function SpeechRecognitionCycle() {
             }
 
             const historyForRequest = lastResponseIdRef.current ? undefined : allMessagesRef.current;
+            const controller = new AbortController();
+            abortControllerRef.current = controller;
             const {message: httpResponse, responseId} = await askLlm(
                 message,
                 lastResponseIdRef.current,
                 historyForRequest,
+                controller.signal,
             )
+            abortControllerRef.current = null;
 
             if (httpResponse) {
                 lastResponseIdRef.current = responseId;
@@ -186,9 +206,19 @@ export function SpeechRecognitionCycle() {
                 setStatus("idle")
             }
         } catch (e) {
+            abortControllerRef.current = null;
+            if (e instanceof DOMException && e.name === "AbortError") {
+                setStatus("idle");
+                return;
+            }
             console.log("Something went wrong", e);
             setStatus("idle");
         }
+    }
+
+    function handleStopThinking() {
+        abortControllerRef.current?.abort();
+        setStatus("idle");
     }
 
     useEffect(() => {
@@ -244,7 +274,11 @@ export function SpeechRecognitionCycle() {
             recognitionRef.current?.stop();
         } else {
             window.speechSynthesis.cancel();
-            recognitionRef.current?.start();
+            try {
+                recognitionRef.current?.start();
+            } catch {
+                // recognition still winding down from a previous session — ignore
+            }
         }
     }
 
@@ -337,17 +371,18 @@ export function SpeechRecognitionCycle() {
                 <div className="flex flex-col items-center gap-3">
                     <div className="flex items-center gap-3">
                         <Button
-                            onClick={toggleListening}
-                            disabled={status === "thinking" || status === "speaking"}
+                            onClick={status === "thinking" ? handleStopThinking : toggleListening}
+                            disabled={status === "speaking"}
                             size="icon"
-                            variant={isListening ? "destructive" : "default"}
+                            variant={isListening || status === "thinking" ? "destructive" : "default"}
                             className={cn(
                                 "h-16 w-16 rounded-full [&_svg]:size-6",
                                 isListening && "animate-pulse",
                             )}
+                            aria-label={status === "thinking" ? "Stop" : undefined}
                         >
                             {status === "thinking" ? (
-                                <Loader2 className="animate-spin"/>
+                                <Square className="fill-current"/>
                             ) : status === "speaking" ? (
                                 <Volume2/>
                             ) : isListening ? (
