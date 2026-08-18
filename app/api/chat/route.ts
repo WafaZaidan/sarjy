@@ -1,37 +1,15 @@
 import OpenAI from "openai";
-import type {ResponseInputItem, Tool} from "openai/resources/responses/responses";
+import type {ResponseInputItem} from "openai/resources/responses/responses";
 
 import {NextResponse} from "next/server";
 import {braveSearch} from "@/lib/tools/brave-search";
+import {INSTRUCTIONS, tools} from "@/lib/llm/instructions";
 
 const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 })
 
-// Toggle web search on/off. Kept off by default to avoid burning Brave Search API credits.
-const WEB_SEARCH_ENABLED = process.env.ENABLE_WEB_SEARCH === "true";
-
-const tools: Tool[] | undefined = WEB_SEARCH_ENABLED ? [
-    {
-        type: "function",
-        name: "brave_search",
-        description: "Search the web for current or up-to-date information, like news, prices, or facts you're unsure of.",
-        parameters: {
-            type: "object",
-            properties: {
-                query: {type: "string", description: "The search query"},
-            },
-            required: ["query"],
-            additionalProperties: false,
-        },
-        strict: true,
-    },
-] : undefined;
-
 const MAX_TOOL_ROUNDS = 3;
-const INSTRUCTIONS = WEB_SEARCH_ENABLED
-    ? " You are Sarjy an AI voice assistant, give precise and concise answers. Use the brave_search tool when you need current or up-to-date information."
-    : " You are Sarjy an AI voice assistant, give precise and concise answers.";
 
 export async function POST(request: Request) {
     try {

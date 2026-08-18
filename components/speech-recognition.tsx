@@ -1,9 +1,10 @@
 "use client";
 
-import {useEffect, useRef, useState} from "react";
+import {FormEvent, useEffect, useRef, useState} from "react";
 import {Mic, MicOff, Volume2, Pause, Play, Plus, Trash2, Square} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
+import {Input} from "@/components/ui/input";
 import {cn} from "@/lib/utils";
 import {askLlm} from "@/lib/api/chat-client";
 import {
@@ -51,6 +52,7 @@ export function SpeechRecognitionCycle() {
     const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
     const [status, setStatus] = useState<Status>("idle");
     const [supported, setSupported] = useState(true);
+    const [textInput, setTextInput] = useState("");
 
     async function ensureConversationId() {
         if (conversationIdRef.current) {
@@ -219,6 +221,16 @@ export function SpeechRecognitionCycle() {
     function handleStopThinking() {
         abortControllerRef.current?.abort();
         setStatus("idle");
+    }
+
+    function handleTextSubmit(e: FormEvent) {
+        e.preventDefault();
+        const trimmed = textInput.trim();
+        if (!trimmed || status === "thinking") {
+            return;
+        }
+        setTextInput("");
+        void handleRecognisedSpeech(trimmed);
     }
 
     useEffect(() => {
@@ -437,6 +449,19 @@ export function SpeechRecognitionCycle() {
                         )}
                     </div>
                 </div>
+
+                <form onSubmit={handleTextSubmit} className="flex w-full gap-2">
+                    <Input
+                        value={textInput}
+                        onChange={(e) => setTextInput(e.target.value)}
+                        placeholder="Or type a message to test…"
+                        disabled={status === "thinking"}
+                        aria-label="Type a message"
+                    />
+                    <Button type="submit" disabled={status === "thinking" || !textInput.trim()}>
+                        Send
+                    </Button>
+                </form>
             </CardContent>
             </Card>
         </div>
