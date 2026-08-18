@@ -11,6 +11,8 @@ type BraveSearchResponse = {
 };
 
 export async function braveSearch(query: string): Promise<string> {
+    console.log(`[brave_search] called with query: "${query}"`);
+
     const apiKey = process.env.BRAVE_API_KEY;
     if (!apiKey) {
         return "Web search is not configured.";
