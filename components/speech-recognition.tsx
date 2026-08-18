@@ -12,6 +12,7 @@ import {
     deleteConversation,
     getMessages,
     getOrCreateConversation,
+    getRecentUserMessages,
     listConversations,
     saveMessage,
     updateConversationTitle,
@@ -37,7 +38,10 @@ export function SpeechRecognitionCycle() {
     const conversationScrollRef = useRef<HTMLDivElement | null>(null);
     const conversationIdRef = useRef<number | null>(null);
     const lastResponseIdRef = useRef<string | null>(null);
-    const historyRef = useRef<ChatMessage[]>([]);
+    // Full history across ALL of the user's conversations (not just the active one),
+    // so facts mentioned in one chat are available when a new response chain starts
+    // in a different chat.
+    const allMessagesRef = useRef<ChatMessage[]>([]);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [conversations, setConversations] = useState<ConversationSummary[]>([]);
     const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
@@ -61,7 +65,6 @@ export function SpeechRecognitionCycle() {
         lastResponseIdRef.current = null;
         setActiveConversationId(id);
         const history = await getMessages(id);
-        historyRef.current = history;
         setMessages(history);
     }
 
@@ -101,7 +104,6 @@ export function SpeechRecognitionCycle() {
         const id = await createConversation();
         conversationIdRef.current = id ?? null;
         lastResponseIdRef.current = null;
-        historyRef.current = [];
         setMessages([]);
         setStatus("idle");
         setActiveConversationId(id ?? null);
@@ -151,6 +153,8 @@ export function SpeechRecognitionCycle() {
             setStatus("thinking");
             setMessages((prev) => [...prev, {role: "user", message}]);
 
+            allMessagesRef.current.push({role: "user", message});
+
             const conversationId = await ensureConversationId();
             if (conversationId) {
                 await saveMessage(conversationId, "user", message);
@@ -163,7 +167,7 @@ export function SpeechRecognitionCycle() {
                 }
             }
 
-            const historyForRequest = lastResponseIdRef.current ? undefined : historyRef.current;
+            const historyForRequest = lastResponseIdRef.current ? undefined : allMessagesRef.current;
             const {message: httpResponse, responseId} = await askLlm(
                 message,
                 lastResponseIdRef.current,
@@ -172,6 +176,7 @@ export function SpeechRecognitionCycle() {
 
             if (httpResponse) {
                 lastResponseIdRef.current = responseId;
+                allMessagesRef.current.push({role: "assistant", message: httpResponse});
                 setMessages((prev) => [...prev, {role: "assistant", message: httpResponse}]);
                 speak(httpResponse)
                 if (conversationId) {
@@ -199,9 +204,11 @@ export function SpeechRecognitionCycle() {
             if (!conversationId) {
                 return;
             }
+
+            allMessagesRef.current = await getRecentUserMessages();
+
             const history = await getMessages(conversationId);
             if (history.length > 0) {
-                historyRef.current = history;
                 setMessages(history);
             }
         })();

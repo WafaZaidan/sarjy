@@ -133,6 +133,21 @@ export async function getMessages(
     return data ?? [];
 }
 
+export async function getRecentUserMessages(
+    limit = 50,
+): Promise<Pick<ConversationMessage, "role" | "message">[]> {
+    const {data, error} = await supabase
+        .from("messages")
+        .select("role, message, created_at")
+        .order("created_at", {ascending: false})
+        .limit(limit);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+    return (data ?? []).reverse();
+}
+
 export async function saveMessage(
     conversationId: number,
     role: "user" | "assistant",
