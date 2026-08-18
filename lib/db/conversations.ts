@@ -10,6 +10,12 @@ export type ConversationMessage = {
     message: string;
 };
 
+export type ConversationSummary = {
+    id: number;
+    title: string | null;
+    created_at: string;
+};
+
 async function insertConversation(userId: string): Promise<number> {
     const {data: newConversation, error: createError} = await supabase.from("conversations").insert({
         user_id: userId,
@@ -66,6 +72,39 @@ export async function createConversation(): Promise<number | undefined> {
     }
 
     return insertConversation(user.id);
+}
+
+export async function deleteConversation(conversationId: number): Promise<void> {
+    const {error} = await supabase
+        .from("conversations")
+        .delete()
+        .eq("id", conversationId);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+}
+
+export async function listConversations(): Promise<ConversationSummary[]> {
+    const {
+        data: {user},
+        error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+        return [];
+    }
+
+    const {data, error} = await supabase
+        .from("conversations")
+        .select("id, title, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", {ascending: false});
+
+    if (error) {
+        throw new Error(error.message);
+    }
+    return data ?? [];
 }
 
 export async function getMessages(

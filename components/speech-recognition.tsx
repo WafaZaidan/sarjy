@@ -1,12 +1,20 @@
 "use client";
 
 import {useEffect, useRef, useState} from "react";
-import {Mic, MicOff, Loader2, Volume2, Pause, Play, Plus} from "lucide-react";
+import {Mic, MicOff, Loader2, Volume2, Pause, Play, Plus, Trash2} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
 import {askLlm} from "@/lib/api/chat-client";
-import {createConversation, getMessages, getOrCreateConversation, saveMessage} from "@/lib/db/conversations";
+import {
+    ConversationSummary,
+    createConversation,
+    deleteConversation,
+    getMessages,
+    getOrCreateConversation,
+    listConversations,
+    saveMessage,
+} from "@/lib/db/conversations";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -21,6 +29,8 @@ export function SpeechRecognitionCycle() {
     const lastResponseIdRef = useRef<string | null>(null);
     const historyRef = useRef<ChatMessage[]>([]);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+    const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
     const [status, setStatus] = useState<Status>("idle");
     const [supported, setSupported] = useState(true);
 
@@ -31,8 +41,48 @@ export function SpeechRecognitionCycle() {
         const id = await getOrCreateConversation();
         if (id) {
             conversationIdRef.current = id;
+            setActiveConversationId(id);
         }
         return id;
+    }
+
+    async function openConversation(id: number) {
+        conversationIdRef.current = id;
+        lastResponseIdRef.current = null;
+        setActiveConversationId(id);
+        const history = await getMessages(id);
+        historyRef.current = history;
+        setMessages(history);
+    }
+
+    async function handleSelectConversation(id: number) {
+        if (id === activeConversationId) {
+            return;
+        }
+        recognitionRef.current?.stop();
+        window.speechSynthesis.cancel();
+        setStatus("idle");
+        await openConversation(id);
+    }
+
+    async function handleDeleteConversation(id: number) {
+        if (!window.confirm("Delete this conversation? This can't be undone.")) {
+            return;
+        }
+        await deleteConversation(id);
+        const remaining = conversations.filter((c) => c.id !== id);
+        setConversations(remaining);
+
+        if (id === activeConversationId) {
+            recognitionRef.current?.stop();
+            window.speechSynthesis.cancel();
+            setStatus("idle");
+            if (remaining.length > 0) {
+                await openConversation(remaining[0].id);
+            } else {
+                await handleNewChat();
+            }
+        }
     }
 
     async function handleNewChat() {
@@ -44,6 +94,13 @@ export function SpeechRecognitionCycle() {
         historyRef.current = [];
         setMessages([]);
         setStatus("idle");
+        setActiveConversationId(id ?? null);
+        if (id) {
+            setConversations((prev) => [
+                {id, title: "Sarjy Converstion", created_at: new Date().toISOString()},
+                ...prev,
+            ]);
+        }
     }
 
     function resumeListening() {
@@ -113,6 +170,9 @@ export function SpeechRecognitionCycle() {
 
     useEffect(() => {
         (async () => {
+            const list = await listConversations();
+            setConversations(list);
+
             const conversationId = await ensureConversationId();
             if (!conversationId) {
                 return;
@@ -189,7 +249,50 @@ export function SpeechRecognitionCycle() {
     };
 
     return (
-        <Card className="h-[640px] w-[560px] shrink-0">
+        <div className="flex h-[640px] gap-4">
+            <Card className="w-64 shrink-0">
+                <CardContent className="flex h-full flex-col gap-2 overflow-hidden p-4">
+                    <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Past chats
+                    </p>
+                    <div className="flex-1 overflow-y-auto">
+                        {conversations.length === 0 ? (
+                            <p className="px-2 text-sm text-muted-foreground">No conversations yet</p>
+                        ) : (
+                            <div className="flex flex-col gap-1">
+                                {conversations.map((c) => (
+                                    <div
+                                        key={c.id}
+                                        className={cn(
+                                            "group flex items-center rounded-md hover:bg-muted",
+                                            c.id === activeConversationId && "bg-muted",
+                                        )}
+                                    >
+                                        <button
+                                            onClick={() => handleSelectConversation(c.id)}
+                                            className={cn(
+                                                "flex-1 truncate px-2 py-2 text-left text-sm",
+                                                c.id === activeConversationId && "font-medium",
+                                            )}
+                                        >
+                                            {c.title || "Untitled conversation"}
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteConversation(c.id)}
+                                            className="mr-1 rounded-md p-1.5 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                                            aria-label="Delete conversation"
+                                        >
+                                            <Trash2 className="size-4"/>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="w-[560px] shrink-0">
             <CardContent className="flex h-full flex-col items-center gap-6 p-6">
                 <Button
                     onClick={handleNewChat}
@@ -262,6 +365,7 @@ export function SpeechRecognitionCycle() {
                     </div>
                 </div>
             </CardContent>
-        </Card>
+            </Card>
+        </div>
     );
 }
