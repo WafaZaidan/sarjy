@@ -11,8 +11,8 @@ export async function POST(request: Request) {
     try {
         const messageJson = await request.json()
         const message = messageJson.message
-        console.log('message', message)
-        console.log('message', typeof message)
+        const previousResponseId = messageJson.previousResponseId
+        const history = messageJson.history
 
         if (typeof message !== 'string' || !message.trim()) {
             return NextResponse.json({
@@ -20,16 +20,29 @@ export async function POST(request: Request) {
                 status: "400"
             })
         }
-        console.log('sending for response', message)
+
+        const hasPreviousResponseId = typeof previousResponseId === 'string' && previousResponseId;
+        const hasHistory = !hasPreviousResponseId && Array.isArray(history) && history.length > 0;
+
+        const input: string | { role: "user" | "assistant"; content: string }[] = hasHistory
+            ? [
+                ...history.map((m: { role: "user" | "assistant"; message: string }) => ({
+                    role: m.role,
+                    content: m.message,
+                })),
+                {role: "user" as const, content: message},
+            ]
+            : message;
 
         const response = await client.responses.create({
             model: "gpt-5-nano",
             instructions: " You are Sarjy an AI voice assistant, give precise and concise answers",
-            input: message,
+            input,
+            previous_response_id: hasPreviousResponseId ? previousResponseId : undefined,
         })
-        console.log('res text', response.output_text)
         return NextResponse.json({
-            message: response.output_text
+            message: response.output_text,
+            responseId: response.id,
         })
 
     } catch (error) {

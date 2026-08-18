@@ -6,7 +6,7 @@ import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
 import {askLlm} from "@/lib/api/chat-client";
-import {getOrCreateConversation, saveMessage} from "@/lib/db/conversations";
+import {getMessages, getOrCreateConversation, saveMessage} from "@/lib/db/conversations";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -18,6 +18,8 @@ type ChatMessage = {
 export function SpeechRecognitionCycle() {
     const recognitionRef = useRef<SpeechRecognition | null>(null);
     const conversationIdRef = useRef<number | null>(null);
+    const lastResponseIdRef = useRef<string | null>(null);
+    const historyRef = useRef<ChatMessage[]>([]);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [status, setStatus] = useState<Status>("idle");
     const [supported, setSupported] = useState(true);
@@ -64,9 +66,15 @@ export function SpeechRecognitionCycle() {
                 await saveMessage(conversationId, "user", message);
             }
 
-            const httpResponse = await askLlm(message)
+            const historyForRequest = lastResponseIdRef.current ? undefined : historyRef.current;
+            const {message: httpResponse, responseId} = await askLlm(
+                message,
+                lastResponseIdRef.current,
+                historyForRequest,
+            )
 
             if (httpResponse) {
+                lastResponseIdRef.current = responseId;
                 setMessages((prev) => [...prev, {role: "assistant", message: httpResponse}]);
                 speak(httpResponse)
                 if (conversationId) {
@@ -80,6 +88,20 @@ export function SpeechRecognitionCycle() {
             setStatus("idle");
         }
     }
+
+    useEffect(() => {
+        (async () => {
+            const conversationId = await ensureConversationId();
+            if (!conversationId) {
+                return;
+            }
+            const history = await getMessages(conversationId);
+            if (history.length > 0) {
+                historyRef.current = history;
+                setMessages(history);
+            }
+        })();
+    }, []);
 
     useEffect(() => {
         const Recognition =

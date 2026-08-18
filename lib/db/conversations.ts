@@ -52,6 +52,21 @@ export async function getOrCreateConversation(): Promise<number | undefined> {
 
 }
 
+export async function getMessages(
+    conversationId: number,
+): Promise<Pick<ConversationMessage, "role" | "message">[]> {
+    const {data, error} = await supabase
+        .from("messages")
+        .select("role, message")
+        .eq("conversation_id", conversationId)
+        .order("created_at", {ascending: true});
+
+    if (error) {
+        throw new Error(error.message);
+    }
+    return data ?? [];
+}
+
 export async function saveMessage(
     conversationId: number,
     role: "user" | "assistant",

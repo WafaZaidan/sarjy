@@ -1,10 +1,14 @@
-export async function askLlm(message: string) {
+export async function askLlm(
+    message: string,
+    previousResponseId: string | null,
+    history?: { role: "user" | "assistant"; message: string }[],
+) {
     const httpResponse = await fetch("/api/chat", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({message}),
+        body: JSON.stringify({message, previousResponseId, history}),
     })
-    const data: { message?: string; error?: string } =
+    const data: { message?: string; responseId?: string; error?: string } =
         await httpResponse.json();
     if (!httpResponse.ok) {
         throw new Error(data.error || "Request failed");
@@ -12,5 +16,5 @@ export async function askLlm(message: string) {
     if (!data.message) {
         throw new Error("Sarjy returned no message");
     }
-    return data.message;
+    return {message: data.message, responseId: data.responseId ?? null};
 }
