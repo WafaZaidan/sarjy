@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
         const response = await client.responses.create({
             model: "gpt-5-nano",
-            instructions: " You are Sarjy a voice aI assistant, give precise and concise answers",
+            instructions: " You are Sarjy an AI voice assistant, give precise and concise answers",
             input: message,
         })
         console.log('res text', response.output_text)
