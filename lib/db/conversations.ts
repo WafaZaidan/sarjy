@@ -10,7 +10,7 @@ export type ConversationMessage = {
     message: string;
 };
 
-export async function getOrCreateConversation(): Promise<Promise<number> | void> {
+export async function getOrCreateConversation(): Promise<number | undefined> {
     const {
         data: {user},
         error: userError,
@@ -50,4 +50,20 @@ export async function getOrCreateConversation(): Promise<Promise<number> | void>
     }
     return newConversation.id;
 
+}
+
+export async function saveMessage(
+    conversationId: number,
+    role: "user" | "assistant",
+    message: string,
+): Promise<void> {
+    const {error} = await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        role,
+        message,
+    });
+
+    if (error) {
+        throw new Error(error.message);
+    }
 }

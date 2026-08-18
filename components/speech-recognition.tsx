@@ -6,16 +6,28 @@ import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
 import {askLlm} from "@/lib/api/chat-client";
-import {getOrCreateConversation} from "@/lib/db/conversations";
+import {getOrCreateConversation, saveMessage} from "@/lib/db/conversations";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
 export function SpeechRecognitionCycle() {
     const recognitionRef = useRef<SpeechRecognition | null>(null);
+    const conversationIdRef = useRef<number | null>(null);
     const [transcript, setTranscript] = useState("");
     const [assistantReply, setAssistantReply] = useState<string>("");
     const [status, setStatus] = useState<Status>("idle");
     const [supported, setSupported] = useState(true);
+
+    async function ensureConversationId() {
+        if (conversationIdRef.current) {
+            return conversationIdRef.current;
+        }
+        const id = await getOrCreateConversation();
+        if (id) {
+            conversationIdRef.current = id;
+        }
+        return id;
+    }
 
 
 
@@ -41,13 +53,20 @@ export function SpeechRecognitionCycle() {
     async function handleRecognisedSpeech(message: string) {
         try {
             setStatus("thinking");
+
+            const conversationId = await ensureConversationId();
+            if (conversationId) {
+                await saveMessage(conversationId, "user", message);
+            }
+
             const httpResponse = await askLlm(message)
 
             if (httpResponse) {
                 setAssistantReply(httpResponse)
                 speak(httpResponse)
-               const convo =await getOrCreateConversation()
-                console.log('convo', convo)
+                if (conversationId) {
+                    await saveMessage(conversationId, "assistant", httpResponse);
+                }
             } else {
                 setStatus("idle")
             }
