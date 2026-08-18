@@ -74,6 +74,17 @@ export async function createConversation(): Promise<number | undefined> {
     return insertConversation(user.id);
 }
 
+export async function updateConversationTitle(conversationId: number, title: string): Promise<void> {
+    const {error} = await supabase
+        .from("conversations")
+        .update({title})
+        .eq("id", conversationId);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+}
+
 export async function deleteConversation(conversationId: number): Promise<void> {
     const {error} = await supabase
         .from("conversations")

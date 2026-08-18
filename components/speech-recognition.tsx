@@ -14,7 +14,16 @@ import {
     getOrCreateConversation,
     listConversations,
     saveMessage,
+    updateConversationTitle,
 } from "@/lib/db/conversations";
+
+function deriveTitle(message: string): string {
+    const trimmed = message.trim();
+    if (!trimmed) {
+        return "New conversation";
+    }
+    return trimmed.length > 60 ? `${trimmed.slice(0, 60).trimEnd()}…` : trimmed;
+}
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -25,6 +34,7 @@ type ChatMessage = {
 
 export function SpeechRecognitionCycle() {
     const recognitionRef = useRef<SpeechRecognition | null>(null);
+    const conversationScrollRef = useRef<HTMLDivElement | null>(null);
     const conversationIdRef = useRef<number | null>(null);
     const lastResponseIdRef = useRef<string | null>(null);
     const historyRef = useRef<ChatMessage[]>([]);
@@ -137,12 +147,20 @@ export function SpeechRecognitionCycle() {
 
     async function handleRecognisedSpeech(message: string) {
         try {
+            const isFirstMessage = messages.length === 0;
             setStatus("thinking");
             setMessages((prev) => [...prev, {role: "user", message}]);
 
             const conversationId = await ensureConversationId();
             if (conversationId) {
                 await saveMessage(conversationId, "user", message);
+                if (isFirstMessage) {
+                    const title = deriveTitle(message);
+                    await updateConversationTitle(conversationId, title);
+                    setConversations((prev) =>
+                        prev.map((c) => (c.id === conversationId ? {...c, title} : c)),
+                    );
+                }
             }
 
             const historyForRequest = lastResponseIdRef.current ? undefined : historyRef.current;
@@ -167,6 +185,10 @@ export function SpeechRecognitionCycle() {
             setStatus("idle");
         }
     }
+
+    useEffect(() => {
+        conversationScrollRef.current?.scrollTo({top: conversationScrollRef.current.scrollHeight});
+    }, [messages]);
 
     useEffect(() => {
         (async () => {
@@ -347,7 +369,7 @@ export function SpeechRecognitionCycle() {
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         Conversation
                     </p>
-                    <div className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3">
+                    <div ref={conversationScrollRef} className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3">
                         {messages.length === 0 ? (
                             <span className="text-sm text-muted-foreground">—</span>
                         ) : (
