@@ -379,7 +379,15 @@ export function SpeechRecognitionCycle() {
                                 "h-16 w-16 rounded-full [&_svg]:size-6",
                                 isListening && "animate-pulse",
                             )}
-                            aria-label={status === "thinking" ? "Stop" : undefined}
+                            aria-label={
+                                status === "thinking"
+                                    ? "Stop"
+                                    : status === "speaking"
+                                        ? "Speaking"
+                                        : isListening
+                                            ? "Stop listening"
+                                            : "Start listening"
+                            }
                         >
                             {status === "thinking" ? (
                                 <Square className="fill-current"/>
@@ -397,6 +405,7 @@ export function SpeechRecognitionCycle() {
                                 size="icon"
                                 variant="outline"
                                 className="h-11 w-11 rounded-full [&_svg]:size-5"
+                                aria-label={status === "paused" ? "Resume" : "Pause"}
                             >
                                 {status === "paused" ? <Play/> : <Pause/>}
                             </Button>
