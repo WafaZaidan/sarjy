@@ -1,12 +1,12 @@
 "use client";
 
 import {useEffect, useRef, useState} from "react";
-import {Mic, MicOff, Loader2, Volume2, Pause, Play} from "lucide-react";
+import {Mic, MicOff, Loader2, Volume2, Pause, Play, Plus} from "lucide-react";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
 import {askLlm} from "@/lib/api/chat-client";
-import {getMessages, getOrCreateConversation, saveMessage} from "@/lib/db/conversations";
+import {createConversation, getMessages, getOrCreateConversation, saveMessage} from "@/lib/db/conversations";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -35,12 +35,34 @@ export function SpeechRecognitionCycle() {
         return id;
     }
 
+    async function handleNewChat() {
+        recognitionRef.current?.stop();
+        window.speechSynthesis.cancel();
+        const id = await createConversation();
+        conversationIdRef.current = id ?? null;
+        lastResponseIdRef.current = null;
+        historyRef.current = [];
+        setMessages([]);
+        setStatus("idle");
+    }
 
+    function resumeListening() {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            setTimeout(resumeListening, 100);
+            return;
+        }
+        setStatus("idle");
+        try {
+            recognitionRef.current?.start();
+        } catch {
+            // already listening or recognition unavailable — ignore
+        }
+    }
 
     function speak(text: string) {
         if (!('speechSynthesis' in window)) {
             console.log('error')
-            setStatus("idle");
+            resumeListening();
             return
         }
 
@@ -50,8 +72,8 @@ export function SpeechRecognitionCycle() {
         utterance.pitch = 1
         utterance.volume = 1
         setStatus("speaking");
-        utterance.onend = () => setStatus("idle");
-        utterance.onerror = () => setStatus("idle");
+        utterance.onend = () => resumeListening();
+        utterance.onerror = () => resumeListening();
         window.speechSynthesis.speak(utterance)
 
     }
@@ -169,11 +191,22 @@ export function SpeechRecognitionCycle() {
     return (
         <Card className="h-[640px] w-[560px] shrink-0">
             <CardContent className="flex h-full flex-col items-center gap-6 p-6">
+                <Button
+                    onClick={handleNewChat}
+                    disabled={status === "thinking" || status === "speaking"}
+                    variant="outline"
+                    size="sm"
+                    className="self-end gap-2"
+                >
+                    <Plus className="size-4"/>
+                    New chat
+                </Button>
+
                 <div className="flex flex-col items-center gap-3">
                     <div className="flex items-center gap-3">
                         <Button
                             onClick={toggleListening}
-                            disabled={status === "thinking" || status === "speaking" || status === "paused"}
+                            disabled={status === "thinking" || status === "speaking"}
                             size="icon"
                             variant={isListening ? "destructive" : "default"}
                             className={cn(

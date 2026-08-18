@@ -10,6 +10,21 @@ export type ConversationMessage = {
     message: string;
 };
 
+async function insertConversation(userId: string): Promise<number> {
+    const {data: newConversation, error: createError} = await supabase.from("conversations").insert({
+        user_id: userId,
+        title: "Sarjy Converstion",
+        created_at: new Date()
+    }).select("id").single()
+    if (createError) {
+        throw new Error(createError.message);
+    }
+    if (!newConversation) {
+        throw new Error("Conversation was not created");
+    }
+    return newConversation.id;
+}
+
 export async function getOrCreateConversation(): Promise<number | undefined> {
     const {
         data: {user},
@@ -17,7 +32,7 @@ export async function getOrCreateConversation(): Promise<number | undefined> {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-        console.log('user isnt authenticated')
+        console.log('Skipping conversation persistence: user is not signed in')
         return
     }
 
@@ -36,20 +51,21 @@ export async function getOrCreateConversation(): Promise<number | undefined> {
         return existingConversation.id;
     }
 
+    return insertConversation(user.id);
+}
 
-    const {data: newConversation, error: createError} = await supabase.from("conversations").insert({
-        user_id: user.id,
-        title: "Sarjy Converstion",
-        created_at: new Date()
-    }).select("id").single()
-    if (createError) {
-        throw new Error(createError.message);
-    }
-    if (!newConversation) {
-        throw new Error("Conversation was not created");
-    }
-    return newConversation.id;
+export async function createConversation(): Promise<number | undefined> {
+    const {
+        data: {user},
+        error: userError,
+    } = await supabase.auth.getUser();
 
+    if (userError || !user) {
+        console.log('Skipping conversation persistence: user is not signed in')
+        return
+    }
+
+    return insertConversation(user.id);
 }
 
 export async function getMessages(
