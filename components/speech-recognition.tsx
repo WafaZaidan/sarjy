@@ -10,11 +10,15 @@ import {getOrCreateConversation, saveMessage} from "@/lib/db/conversations";
 
 type Status = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
+type ChatMessage = {
+    role: "user" | "assistant";
+    message: string;
+};
+
 export function SpeechRecognitionCycle() {
     const recognitionRef = useRef<SpeechRecognition | null>(null);
     const conversationIdRef = useRef<number | null>(null);
-    const [transcript, setTranscript] = useState("");
-    const [assistantReply, setAssistantReply] = useState<string>("");
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [status, setStatus] = useState<Status>("idle");
     const [supported, setSupported] = useState(true);
 
@@ -53,6 +57,7 @@ export function SpeechRecognitionCycle() {
     async function handleRecognisedSpeech(message: string) {
         try {
             setStatus("thinking");
+            setMessages((prev) => [...prev, {role: "user", message}]);
 
             const conversationId = await ensureConversationId();
             if (conversationId) {
@@ -62,7 +67,7 @@ export function SpeechRecognitionCycle() {
             const httpResponse = await askLlm(message)
 
             if (httpResponse) {
-                setAssistantReply(httpResponse)
+                setMessages((prev) => [...prev, {role: "assistant", message: httpResponse}]);
                 speak(httpResponse)
                 if (conversationId) {
                     await saveMessage(conversationId, "assistant", httpResponse);
@@ -88,9 +93,6 @@ export function SpeechRecognitionCycle() {
 
         recognition.onresult = async (event: SpeechRecognitionEvent) => {
             const message = event.results[0][0].transcript
-            console.log('message?', message)
-
-            setTranscript(message);
             await handleRecognisedSpeech(message)
         };
         recognition.onstart = () => setStatus("listening");
@@ -109,8 +111,6 @@ export function SpeechRecognitionCycle() {
             recognitionRef.current?.stop();
         } else {
             window.speechSynthesis.cancel();
-            setTranscript("");
-            setAssistantReply("");
             recognitionRef.current?.start();
         }
     }
@@ -185,28 +185,25 @@ export function SpeechRecognitionCycle() {
                     </span>
                 </div>
 
-                <div className="flex w-full flex-1 flex-col gap-3 overflow-hidden">
-                    <div className="flex h-20 flex-col gap-1">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            You said
-                        </p>
-                        <div className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-sm">
-                            {transcript || (
-                                <span className="text-muted-foreground">—</span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex flex-1 flex-col gap-1 overflow-hidden">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Sarjy
-                        </p>
-                        <div
-                            className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
-                            {assistantReply || (
-                                <span className="text-muted-foreground">—</span>
-                            )}
-                        </div>
+                <div className="flex w-full flex-1 flex-col gap-1 overflow-hidden">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Conversation
+                    </p>
+                    <div className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3">
+                        {messages.length === 0 ? (
+                            <span className="text-sm text-muted-foreground">—</span>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                {messages.map((m, i) => (
+                                    <div key={i} className="flex flex-col gap-1">
+                                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            {m.role === "user" ? "You" : "Sarjy"}
+                                        </p>
+                                        <p className="text-sm whitespace-pre-wrap">{m.message}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </CardContent>
