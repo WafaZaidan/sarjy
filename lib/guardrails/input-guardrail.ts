@@ -3,6 +3,7 @@
 // the same ground, but a prompt alone can't guarantee it's always followed — this
 // runs independently of the model and blocks deterministically.
 import {findPii} from "./pii";
+import {checkModeration} from "./moderation";
 
 const JAILBREAK_PATTERNS: {name: string; pattern: RegExp}[] = [
     {name: "instruction override attempt", pattern: /ignore\s+(all\s+)?(the\s+)?(previous|prior|above|earlier)\s+instructions?/i},
@@ -26,7 +27,8 @@ export type InputGuardrailResult =
     | {blocked: false}
     | {blocked: true; reason: string};
 
-export function checkInput(message: string): InputGuardrailResult {
+
+export async function checkInput(message: string): Promise<InputGuardrailResult> {
     const piiFound = findPii(message);
     if (piiFound) {
         console.log(`[input_guardrail] blocked — message appears to contain a ${piiFound}`);
@@ -37,6 +39,14 @@ export function checkInput(message: string): InputGuardrailResult {
     if (jailbreakFound) {
         console.log(`[input_guardrail] blocked — message looks like a ${jailbreakFound}`);
         return {blocked: true, reason: "your message looks like an attempt to override my instructions"};
+    }
+
+    // Cheap pattern checks run first so the moderation call — a network round
+    // trip — is only paid for once the free checks above have already passed.
+    const moderation = await checkModeration(message);
+    if (moderation.flagged) {
+        console.log(`[input_guardrail] blocked — message flagged by moderation: ${moderation.categories.join(", ")}`);
+        return {blocked: true, reason: "your message was flagged as potentially harmful"};
     }
 
     return {blocked: false};

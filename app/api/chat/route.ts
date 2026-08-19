@@ -1,14 +1,11 @@
-import OpenAI from "openai";
 import type {ResponseInputItem} from "openai/resources/responses/responses";
 
 import {NextResponse} from "next/server";
 import {braveSearch} from "@/lib/tools/brave-search";
 import {INSTRUCTIONS, tools} from "@/lib/llm/instructions";
 import {checkInput} from "@/lib/guardrails/input-guardrail";
-
-const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-})
+import {checkOutput} from "@/lib/guardrails/output-guardrail";
+import {client} from "@/lib/llm/client";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -26,7 +23,7 @@ export async function POST(request: Request) {
             })
         }
 
-        const guardrailResult = checkInput(message);
+        const guardrailResult = await checkInput(message);
         if (guardrailResult.blocked) {
             return NextResponse.json({
                 message: `I can't respond to that — ${guardrailResult.reason}.`,
@@ -86,6 +83,14 @@ export async function POST(request: Request) {
                 input: toolOutputs,
                 tools,
                 previous_response_id: response.id,
+            })
+        }
+
+        const outputGuardrailResult = await checkOutput(response.output_text);
+        if (outputGuardrailResult.blocked) {
+            return NextResponse.json({
+                message: "I can't share that response — it was flagged as potentially harmful.",
+                responseId: response.id,
             })
         }
 
