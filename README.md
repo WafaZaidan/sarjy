@@ -70,7 +70,7 @@ as a known gap given the time budget.
 
 ### Reliability
 
-Three things address reliability for Sarjy:
+Four things address reliability for Sarjy:
 
 1. [`app/api/chat/route.ts`](app/api/chat/route.ts) now returns a real JSON error on
    unhandled exceptions instead of an empty 200 (it used to fail silently).
@@ -81,6 +81,9 @@ Three things address reliability for Sarjy:
    through, trading availability for safety on purpose.
 3. `MAX_TOOL_ROUNDS = 3` in [`app/api/chat/route.ts`](app/api/chat/route.ts) bounds how many
    times the model can call `brave_search` in one turn.
+4. The LLM call, Moderation, and Brave search all now have explicit timeouts (8–15s) instead
+   of hanging indefinitely — a timed-out search returns a friendly "try again later" message
+   the model relays, and a timed-out moderation call still fails closed per #2.
 
 ## Stack
 
