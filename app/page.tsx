@@ -3,6 +3,7 @@ import {Lock} from "lucide-react";
 import {EnvVarWarning} from "@/components/env-var-warning";
 import {AuthButton} from "@/components/auth-button";
 import {Hero} from "@/components/hero";
+import {DecorativeBackground} from "@/components/decorative-background";
 import {ThemeSwitcher} from "@/components/theme-switcher";
 import {hasEnvVars} from "@/lib/utils";
 import {Suspense} from "react";
@@ -74,6 +75,7 @@ async function VoiceWidget() {
 export default function Home() {
     return (
         <main className="min-h-screen flex flex-col items-center">
+            <DecorativeBackground/>
             <div className="flex-1 w-full flex flex-col gap-20 items-center">
                 <Suspense>
                     <AuthNav/>
