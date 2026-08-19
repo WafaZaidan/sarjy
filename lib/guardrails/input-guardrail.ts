@@ -54,7 +54,7 @@ export async function checkInput(message: string): Promise<InputGuardrailResult>
         // rate limit), we can't confirm the message is safe, so we block rather
         // than silently skip this layer and let it through unchecked.
         console.error("[input_guardrail] moderation check failed, blocking", error);
-        return {blocked: true, reason: "your message couldn't be checked for safety right now"};
+        return {blocked: true, reason: "your message couldn't be checked for safety right now — please try again in a moment"};
     }
 
     return {blocked: false};

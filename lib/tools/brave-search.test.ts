@@ -46,4 +46,15 @@ describe("braveSearch PII guard", () => {
         expect(global.fetch).toHaveBeenCalledTimes(1);
         expect(result).not.toMatch(/blocked/i);
     });
+
+    it("returns a friendly message when the request times out", async () => {
+        (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(
+            new DOMException("The operation was aborted.", "TimeoutError"),
+        );
+
+        const result = await braveSearch("Ada Lovelace");
+
+        expect(result).toMatch(/timed out/i);
+        expect(result).toMatch(/try again/i);
+    });
 });

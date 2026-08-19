@@ -8,6 +8,7 @@ import {checkOutput} from "@/lib/guardrails/output-guardrail";
 import {client} from "@/lib/llm/client";
 
 const MAX_TOOL_ROUNDS = 3;
+const LLM_TIMEOUT_MS = 15_000;
 
 export async function POST(request: Request) {
     try {
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
             input,
             tools,
             previous_response_id: hasPreviousResponseId ? previousResponseId : undefined,
-        })
+        }, {timeout: LLM_TIMEOUT_MS})
 
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             const functionCalls = response.output.filter(
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
                 input: toolOutputs,
                 tools,
                 previous_response_id: response.id,
-            })
+            }, {timeout: LLM_TIMEOUT_MS})
         }
 
         const outputGuardrailResult = await checkOutput(response.output_text);

@@ -12,6 +12,8 @@ type BraveSearchResponse = {
     };
 };
 
+const BRAVE_TIMEOUT_MS = 8_000;
+
 export async function braveSearch(query: string): Promise<string> {
     const piiFound = findPii(query);
     if (piiFound) {
@@ -30,12 +32,19 @@ export async function braveSearch(query: string): Promise<string> {
     url.searchParams.set("q", query);
     url.searchParams.set("count", "5");
 
-    const response = await fetch(url, {
-        headers: {
-            Accept: "application/json",
-            "X-Subscription-Token": apiKey,
-        },
-    });
+    let response: Response;
+    try {
+        response = await fetch(url, {
+            headers: {
+                Accept: "application/json",
+                "X-Subscription-Token": apiKey,
+            },
+            signal: AbortSignal.timeout(BRAVE_TIMEOUT_MS),
+        });
+    } catch (error) {
+        console.error("[brave_search] request failed or timed out", error);
+        return "Web search timed out. Please try again later.";
+    }
 
     if (!response.ok) {
         return `Web search failed with status ${response.status}.`;

@@ -5,6 +5,8 @@
 // generated reply, since either side can carry flagged content.
 import {client} from "@/lib/llm/client";
 
+const MODERATION_TIMEOUT_MS = 8_000;
+
 export type ModerationResult =
     | {flagged: false}
     | {flagged: true; categories: string[]};
@@ -13,7 +15,7 @@ export async function checkModeration(text: string): Promise<ModerationResult> {
     const response = await client.moderations.create({
         model: "omni-moderation-latest",
         input: text,
-    });
+    }, {timeout: MODERATION_TIMEOUT_MS});
 
     const result = response.results[0];
     if (!result?.flagged) {
