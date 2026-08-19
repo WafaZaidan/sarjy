@@ -39,80 +39,48 @@ at SarjAI given the nature of the product and the customer requests they'll be g
 
 ### What was built
 
-The pipeline now looks like: **policy prompt → input guardrail (regex + moderation) → LLM
-call → output guardrail (moderation) → response**, plus a separate PII check scoped to
-search queries specifically. Each layer is independent of the others, so a failure in one
-(e.g. the model ignoring the policy) doesn't remove the rest.
+Four independent layers of defense sit around the LLM call: a policy prompt going in, an
+input guardrail checking the user's message, an output guardrail checking the model's reply,
+and a PII check scoped to search queries. The request flow is policy prompt → input
+guardrail → **LLM call** → output guardrail → response, with the PII check firing separately
+whenever the model calls the search tool. The layers being independent matters here because if the 
+model ignores the policy, the code-level checks still catch it.
 
-**1. A safety policy prompt** (`lib/llm/instructions.ts`, `SAFETY_INSTRUCTIONS`). This is the
-first line of defence, sent to the model on every request. It covers 8 areas: refusing
-harmful requests, resisting jailbreaks, handling personal information, keeping private
-searches out of external tools, treating tool results as untrusted (not as instructions),
-staying factually grounded, scoping memory, and how to refuse.
+- **Policy prompt** ([`lib/llm/instructions.ts`](lib/llm/instructions.ts)) — sent to the
+  model on every request, covers 8 areas including harmful requests, jailbreaks, PII, and
+  tool-result trust.
+- **Input guardrail** ([`lib/guardrails/input-guardrail.ts`](lib/guardrails/input-guardrail.ts))
+  — PII regex, then jailbreak regex, then Moderation for everything else. Cheap regex runs
+  first so moderation's network call only happens once those pass. The jailbreak regex is
+  the weak point — known phrasings only, no defence against creative rewordings, and
+  Moderation doesn't help since it classifies harmful content, not manipulation attempts. A
+  dedicated classifier would close that gap; left as a known limitation given the time
+  budget.
+- **Output guardrail** ([`lib/guardrails/output-guardrail.ts`](lib/guardrails/output-guardrail.ts))
+  — same Moderation check, on the model's reply, since nothing upstream verifies what it
+  actually says.
+- **Search-query PII check** ([`lib/tools/brave-search.ts`](lib/tools/brave-search.ts)) —
+  blocks a query before it reaches Brave using the same PII regex, shared via
+  [`lib/guardrails/pii.ts`](lib/guardrails/pii.ts). Separate from the input guardrail because
+  that only sees the user's message, not what the model puts into a tool call.
 
-**2. An input guardrail** (`lib/guardrails/input-guardrail.ts`), run on every raw user
-message before it reaches the LLM at all:
-- PII regex (emails, US-style phone numbers), shared with the tool-call check below via
-  `lib/guardrails/pii.ts` so the patterns live in one place.
-- Jailbreak regex for known phrasings (instruction override, system-prompt extraction,
-  persona override — e.g. "ignore all previous instructions", "you are now DAN").
-- OpenAI's Moderation API, for harmful-content categories (violence, self-harm, hate,
-  sexual, harassment) that the regexes were never going to generalize to.
-
-These run cheapest-first: the free regex checks run before the moderation network call, so
-a message that's already caught doesn't also pay for the round trip.
-
-Known limitation on the jailbreak regex: it only catches known phrasings, not creative
-rephrasings or novel jailbreak attempts. A more robust fix would be a dedicated
-classifier — either a small LLM-judge call or a purpose-built model (e.g. Meta's Prompt
-Guard) — trained to detect jailbreak *intent* rather than exact wording; left as a known
-gap given the time budget, since Moderation doesn't cover this category at all (it
-classifies harmful content, not attempts to manipulate the assistant).
-
-**3. An output guardrail** (`lib/guardrails/output-guardrail.ts`), run on the model's
-generated reply before it's returned to the user — the same Moderation API check as the
-input side, since the policy and input guardrail both act *before* generation and neither
-guarantees what the model actually says stays within bounds.
-
-**4. A code-level PII check on search queries** (`lib/tools/brave-search.ts`). Before any
-query reaches Brave, it's checked against the same PII regex as the input guardrail (now
-shared via `lib/guardrails/pii.ts`). A match blocks the search outright — the request to
-Brave is never sent — and gets logged for testing. This exists as a separate layer because
-the input guardrail only sees the user's raw message, not what the model decides to put
-into a tool call's arguments.
-
-Known limitation: the phone regex only covers the US format. I tested a UK-style number
-(`07700 900123`) and confirmed it slips past the code-level check — it only got blocked
-because the prompt policy caught it first. A proper fix would use a phone-parsing library
-(e.g. `libphonenumber-js`) instead of hand-rolled regex, covering more formats and PII types
-generally; left as a known gap given the time budget.
-
+Known limitation: the phone regex is US-only — a UK number (`07700 900123`) slips past it
+and only gets caught by the prompt policy. `libphonenumber-js` would fix this properly; left
+as a known gap given the time budget.
 
 ### Reliability
 
 Three things address reliability for Sarjy:
 
-1. `app/api/chat/route.ts` now returns a real JSON error on unhandled exceptions instead of
-   an empty 200 (it used to fail silently).
-2. `checkInput`/`checkOutput` fail closed if the Moderation API call itself errors — an
-   unverifiable message is blocked, not let through, trading availability for safety on
-   purpose.
-3. `MAX_TOOL_ROUNDS = 3` bounds how many times the model can call `brave_search` in one turn.
-
-
-### What I found
-
-- **`gpt-5-nano` already refuses obvious harm/jailbreak attempts unprompted.** A/B testing
-  identical prompts with `SAFETY_INSTRUCTIONS` on vs. commented out gave the same refusals
-  either way and the policy didn't change those outcomes, but it documents intended behavior
-  and introduced no false refusals.
-- **The policy did catch things the base model missed.** For example, asking it to "search
-  information on \<name\>, latest news"and looking up a specific person online only got
-  refused reliably after I added a rule for it.
-- **Prompt-only policy is a single point of failure for PII-in-tool-calls**, which is why the
-  regex backstop exists as a separate, code-level layer rather than relying on the model
-  alone to keep PII out of the search query.
-
+1. [`app/api/chat/route.ts`](app/api/chat/route.ts) now returns a real JSON error on
+   unhandled exceptions instead of an empty 200 (it used to fail silently).
+2. `checkInput`/`checkOutput` (in
+   [`lib/guardrails/input-guardrail.ts`](lib/guardrails/input-guardrail.ts) and
+   [`lib/guardrails/output-guardrail.ts`](lib/guardrails/output-guardrail.ts)) fail closed if
+   the Moderation API call itself errors — an unverifiable message is blocked, not let
+   through, trading availability for safety on purpose.
+3. `MAX_TOOL_ROUNDS = 3` in [`app/api/chat/route.ts`](app/api/chat/route.ts) bounds how many
+   times the model can call `brave_search` in one turn.
 
 ## Stack
 
