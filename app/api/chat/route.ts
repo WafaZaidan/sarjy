@@ -4,6 +4,7 @@ import type {ResponseInputItem} from "openai/resources/responses/responses";
 import {NextResponse} from "next/server";
 import {braveSearch} from "@/lib/tools/brave-search";
 import {INSTRUCTIONS, tools} from "@/lib/llm/instructions";
+import {checkInput} from "@/lib/guardrails/input-guardrail";
 
 const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -22,6 +23,14 @@ export async function POST(request: Request) {
             return NextResponse.json({
                 error: "Invalid Message",
                 status: "400"
+            })
+        }
+
+        const guardrailResult = checkInput(message);
+        if (guardrailResult.blocked) {
+            return NextResponse.json({
+                message: `I can't respond to that — ${guardrailResult.reason}.`,
+                responseId: previousResponseId ?? null,
             })
         }
 
