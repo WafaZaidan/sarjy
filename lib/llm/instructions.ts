@@ -3,6 +3,10 @@ import type {Tool} from "openai/resources/responses/responses";
 // Toggle web search on/off. Kept off by default to avoid burning Brave Search API credits.
 export const WEB_SEARCH_ENABLED = process.env.ENABLE_WEB_SEARCH === "true";
 
+// Shared with app/api/chat/route.ts so the tool-call cap enforced in code and
+// the budget the model is told about in its instructions can't drift apart.
+export const MAX_TOOL_ROUNDS = 3;
+
 export const tools: Tool[] | undefined = WEB_SEARCH_ENABLED ? [
     {
         type: "function",
@@ -80,8 +84,23 @@ export const INSTRUCTIONS = [
     SAFETY_INSTRUCTIONS,
     "Give precise and concise answers, since replies are read aloud by voice.",
     WEB_SEARCH_ENABLED
-        ? "Use the brave_search tool when you need current or up-to-date information."
+        ? `Use the brave_search tool when you need current or up-to-date information. You have ` +
+          `at most ${MAX_TOOL_ROUNDS} search calls per turn — make each query count rather than ` +
+          `issuing near-duplicate searches, and be ready to answer from what you've found once ` +
+          `you're running low. Call brave_search once per turn in most cases; only search again ` +
+          `if the first results are clearly irrelevant or empty. Don't chase exact real-time ` +
+          `freshness — summarize what the top results say and note if they may not be from ` +
+          `today, rather than reformulating the query to force a specific date.`
         : null,
 ]
     .filter(Boolean)
     .join("\n\n");
+
+// Sent only on the final allowed tool round, once `tools` has been omitted from
+// that call — without this, a model mid-search can respond by writing fake
+// tool-call-shaped text instead of a plain answer, since it's used to "calling
+// search" being how it responds to this kind of request.
+export const FINAL_ROUND_NOTE =
+    "Search is no longer available for this reply. Do not describe, format, or simulate a " +
+    "tool call — answer now in plain language using only what you've already found. If the " +
+    "results were insufficient, say so honestly instead of guessing.";

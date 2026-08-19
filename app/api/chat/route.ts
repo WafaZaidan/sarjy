@@ -2,13 +2,12 @@ import type {ResponseFunctionToolCall, ResponseInputItem} from "openai/resources
 
 import {NextResponse} from "next/server";
 import {braveSearch} from "@/lib/tools/brave-search";
-import {INSTRUCTIONS, tools} from "@/lib/llm/instructions";
+import {FINAL_ROUND_NOTE, INSTRUCTIONS, MAX_TOOL_ROUNDS, tools} from "@/lib/llm/instructions";
 import {checkInput} from "@/lib/guardrails/input-guardrail";
 import {checkOutput} from "@/lib/guardrails/output-guardrail";
 import {checkGrounding} from "@/lib/guardrails/hallucination-guardrail";
 import {client} from "@/lib/llm/client";
 
-const MAX_TOOL_ROUNDS = 3;
 const LLM_TIMEOUT_MS = 15_000;
 
 function parseSearchQuery(call: ResponseFunctionToolCall): string {
@@ -99,11 +98,13 @@ export async function POST(request: Request) {
             // Omitting `tools` here forces a final text answer instead of another
             // unresolved function call once rounds run out — the model still sees
             // every tool output collected so far.
+            const lastRound = isLastToolRound(round);
+
             response = await client.responses.create({
                 model: "gpt-5-nano",
-                instructions: INSTRUCTIONS,
+                instructions: lastRound ? `${INSTRUCTIONS}\n\n${FINAL_ROUND_NOTE}` : INSTRUCTIONS,
                 input: toolOutputs,
-                tools: isLastToolRound(round) ? undefined : tools,
+                tools: lastRound ? undefined : tools,
                 previous_response_id: response.id,
             }, {timeout: LLM_TIMEOUT_MS})
         }
