@@ -46,10 +46,16 @@ searches out of external tools, treating tool results as untrusted (not as instr
 staying factually grounded, scoping memory, and how to refuse.
 
 **2. A code-level PII check** (`lib/tools/brave-search.ts`). Before any search query reaches
-Brave, it's checked against regex patterns for emails and phone numbers. A match blocks the
-search outright — the request to Brave is never sent — and gets logged for testing. This is
-a second layer that doesn't rely on the model, since a prompt alone can't guarantee it's
-always followed. The regex list can grow to cover more PII types later.
+Brave, it's checked against regex patterns for emails and US-style phone numbers
+(`ddd-ddd-dddd`). A match blocks the search outright — the request to Brave is never sent —
+and gets logged for testing. This is a second layer that doesn't rely on the model, since a
+prompt alone can't guarantee it's always followed.
+
+Known limitation: the phone regex only covers the US format. I tested a UK-style number
+(`07700 900123`) and confirmed it slips past the code-level check — it only got blocked
+because the prompt policy caught it first. A proper fix would use a phone-parsing library
+(e.g. `libphonenumber-js`) instead of hand-rolled regex, covering more formats and PII types
+generally; left as a known gap given the time budget.
 
 
 ### What I found

@@ -12,6 +12,7 @@ type BraveSearchResponse = {
 
 // Deterministic backstop: even if the model's prompt-based policy fails to catch it,
 // never let a query containing this shape of PII actually reach an external API.
+// Phone pattern is US-only (NANP 3-3-4) for now — other formats aren't caught yet.
 const PII_PATTERNS: {name: string; pattern: RegExp}[] = [
     {name: "email address", pattern: /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i},
     {name: "phone number", pattern: /(?:\+?\d{1,3}[-.\s])?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/},

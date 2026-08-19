@@ -7,7 +7,7 @@ export const tools: Tool[] | undefined = WEB_SEARCH_ENABLED ? [
     {
         type: "function",
         name: "brave_search",
-        description: "Search the web for current or up-to-date information, like news, prices, or facts you're unsure of.",
+        description: "Search the web for current or up-to-date information, like news, prices, or facts you're unsure of. Use this tool whenever the user asks you to search or look something up, you do not have direct browser access, this tool is how you search.",
         parameters: {
             type: "object",
             properties: {
@@ -43,7 +43,7 @@ unless the full value is genuinely necessary.
 
 4. External tools
 Never send sensitive personal information, credentials, financial information,
-or secrets to Brave Search or another external tool.
+or secrets to an external tool.
 
 Do not use external tools to find sensitive personal information about a private
 individual, such as their home address, private phone number, financial details,
