@@ -438,11 +438,22 @@ export function SpeechRecognitionCycle() {
                         ) : (
                             <div className="flex flex-col gap-3">
                                 {messages.map((m, i) => (
-                                    <div key={i} className="flex flex-col gap-1">
+                                    <div
+                                        key={i}
+                                        className={`flex flex-col gap-1 ${m.role === "user" ? "items-end text-right" : "items-start text-left"}`}
+                                    >
                                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                             {m.role === "user" ? "You" : "Sarjy"}
                                         </p>
-                                        <p className="text-sm whitespace-pre-wrap">{m.message}</p>
+                                        <p
+                                            className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                                                m.role === "user"
+                                                    ? "bg-blue-600 text-white"
+                                                    : "bg-pink-600 text-white"
+                                            }`}
+                                        >
+                                            {m.message}
+                                        </p>
                                     </div>
                                 ))}
                             </div>
