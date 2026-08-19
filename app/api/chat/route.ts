@@ -1,14 +1,43 @@
-import type {ResponseInputItem} from "openai/resources/responses/responses";
+import type {ResponseFunctionToolCall, ResponseInputItem} from "openai/resources/responses/responses";
 
 import {NextResponse} from "next/server";
 import {braveSearch} from "@/lib/tools/brave-search";
 import {INSTRUCTIONS, tools} from "@/lib/llm/instructions";
 import {checkInput} from "@/lib/guardrails/input-guardrail";
 import {checkOutput} from "@/lib/guardrails/output-guardrail";
+import {checkGrounding} from "@/lib/guardrails/hallucination-guardrail";
 import {client} from "@/lib/llm/client";
 
 const MAX_TOOL_ROUNDS = 3;
 const LLM_TIMEOUT_MS = 15_000;
+
+function parseSearchQuery(call: ResponseFunctionToolCall): string {
+    try {
+        return JSON.parse(call.arguments).query ?? "";
+    } catch {
+        return "";
+    }
+}
+
+async function executeFunctionCalls(
+    functionCalls: ResponseFunctionToolCall[],
+): Promise<{toolOutputs: ResponseInputItem[]; searchResults: string[]}> {
+    const toolOutputs: ResponseInputItem[] = [];
+    const searchResults: string[] = [];
+
+    for (const call of functionCalls) {
+        const query = parseSearchQuery(call);
+        const result = query ? await braveSearch(query) : "Missing search query.";
+        searchResults.push(result);
+        toolOutputs.push({type: "function_call_output", call_id: call.call_id, output: result});
+    }
+
+    return {toolOutputs, searchResults};
+}
+
+function isLastToolRound(round: number): boolean {
+    return round === MAX_TOOL_ROUNDS - 1;
+}
 
 export async function POST(request: Request) {
     try {
@@ -53,6 +82,8 @@ export async function POST(request: Request) {
             previous_response_id: hasPreviousResponseId ? previousResponseId : undefined,
         }, {timeout: LLM_TIMEOUT_MS})
 
+        const searchResults: string[] = [];
+
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             const functionCalls = response.output.filter(
                 (item) => item.type === "function_call",
@@ -62,29 +93,27 @@ export async function POST(request: Request) {
                 break;
             }
 
-            const toolOutputs: ResponseInputItem[] = [];
-            for (const call of functionCalls) {
-                let query = "";
-                try {
-                    query = JSON.parse(call.arguments).query;
-                } catch {
-                    query = "";
-                }
-                const result = query ? await braveSearch(query) : "Missing search query.";
-                toolOutputs.push({
-                    type: "function_call_output",
-                    call_id: call.call_id,
-                    output: result,
-                });
-            }
+            const {toolOutputs, searchResults: roundResults} = await executeFunctionCalls(functionCalls);
+            searchResults.push(...roundResults);
 
+            // Omitting `tools` here forces a final text answer instead of another
+            // unresolved function call once rounds run out — the model still sees
+            // every tool output collected so far.
             response = await client.responses.create({
                 model: "gpt-5-nano",
                 instructions: INSTRUCTIONS,
                 input: toolOutputs,
-                tools,
+                tools: isLastToolRound(round) ? undefined : tools,
                 previous_response_id: response.id,
             }, {timeout: LLM_TIMEOUT_MS})
+        }
+
+        const groundingResult = checkGrounding(response.output_text, searchResults);
+        if (groundingResult.blocked) {
+            return NextResponse.json({
+                message: "I can't share that response — it referenced a source I didn't actually find.",
+                responseId: response.id,
+            })
         }
 
         const outputGuardrailResult = await checkOutput(response.output_text);
@@ -96,7 +125,7 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({
-            message: response.output_text,
+            message: response.output_text.trim() || "I searched but couldn't find a clear answer to that.",
             responseId: response.id,
         })
 

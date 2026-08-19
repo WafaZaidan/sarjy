@@ -39,12 +39,11 @@ at SarjAI given the nature of the product and the customer requests they'll be g
 
 ### What was built
 
-Four independent layers of defense sit around the LLM call: a policy prompt going in, an
-input guardrail checking the user's message, an output guardrail checking the model's reply,
-and a PII check scoped to search queries. The request flow is policy prompt → input
-guardrail → **LLM call** → output guardrail → response, with the PII check firing separately
-whenever the model calls the search tool. The layers being independent matters here because if the 
-model ignores the policy, the code-level checks still catch it.
+Five independent layers of defense sit around the LLM call: a policy prompt, an input
+guardrail, an output guardrail, a hallucination check on search-backed replies, and a PII
+check on search queries. Flow: policy prompt → input guardrail → **LLM call** → output
+guardrail + hallucination check → response, PII check firing separately per search. Independent
+matters — if the model ignores the policy, the code-level checks still catch it.
 
 - **Policy prompt** ([`lib/llm/instructions.ts`](lib/llm/instructions.ts)) — sent to the
   model on every request, covers 8 areas including harmful requests, jailbreaks, PII, and
@@ -59,6 +58,9 @@ model ignores the policy, the code-level checks still catch it.
 - **Output guardrail** ([`lib/guardrails/output-guardrail.ts`](lib/guardrails/output-guardrail.ts))
   — same Moderation check, on the model's reply, since nothing upstream verifies what it
   actually says.
+- **Hallucination guardrail** ([`lib/guardrails/hallucination-guardrail.ts`](lib/guardrails/hallucination-guardrail.ts))
+  — blocks a reply that cites a URL not actually in that turn's search results. Catches
+  fabricated sources only, not a real source's facts stated incorrectly.
 - **Search-query PII check** ([`lib/tools/brave-search.ts`](lib/tools/brave-search.ts)) —
   blocks a query before it reaches Brave using the same PII regex, shared via
   [`lib/guardrails/pii.ts`](lib/guardrails/pii.ts). Separate from the input guardrail because
