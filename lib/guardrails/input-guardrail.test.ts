@@ -71,4 +71,12 @@ describe("checkInput", () => {
         expect(result.blocked).toBe(false);
         expect(create).toHaveBeenCalledTimes(1);
     });
+
+    it("fails closed when the moderation call errors", async () => {
+        create.mockRejectedValue(new Error("moderation API unavailable"));
+
+        const result = await checkInput("what's the weather like for a walk today?");
+
+        expect(result.blocked).toBe(true);
+    });
 });

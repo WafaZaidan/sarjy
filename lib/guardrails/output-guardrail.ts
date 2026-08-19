@@ -13,10 +13,17 @@ export async function checkOutput(reply: string): Promise<OutputGuardrailResult>
         return {blocked: false};
     }
 
-    const moderation = await checkModeration(reply);
-    if (moderation.flagged) {
-        console.log(`[output_guardrail] blocked — reply flagged by moderation: ${moderation.categories.join(", ")}`);
-        return {blocked: true, reason: "the generated reply was flagged as potentially harmful"};
+    try {
+        const moderation = await checkModeration(reply);
+        if (moderation.flagged) {
+            console.log(`[output_guardrail] blocked — reply flagged by moderation: ${moderation.categories.join(", ")}`);
+            return {blocked: true, reason: "the generated reply was flagged as potentially harmful"};
+        }
+    } catch (error) {
+        // Fail closed, same reasoning as the input guardrail: an unchecked
+        // reply is treated as unsafe to show rather than passed through.
+        console.error("[output_guardrail] moderation check failed, blocking", error);
+        return {blocked: true, reason: "the generated reply couldn't be checked for safety right now"};
     }
 
     return {blocked: false};

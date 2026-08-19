@@ -88,6 +88,18 @@ because the prompt policy caught it first. A proper fix would use a phone-parsin
 generally; left as a known gap given the time budget.
 
 
+### Reliability
+
+Three things address reliability for Sarjy:
+
+1. `app/api/chat/route.ts` now returns a real JSON error on unhandled exceptions instead of
+   an empty 200 (it used to fail silently).
+2. `checkInput`/`checkOutput` fail closed if the Moderation API call itself errors — an
+   unverifiable message is blocked, not let through, trading availability for safety on
+   purpose.
+3. `MAX_TOOL_ROUNDS = 3` bounds how many times the model can call `brave_search` in one turn.
+
+
 ### What I found
 
 - **`gpt-5-nano` already refuses obvious harm/jailbreak attempts unprompted.** A/B testing

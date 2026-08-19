@@ -43,10 +43,18 @@ export async function checkInput(message: string): Promise<InputGuardrailResult>
 
     // Cheap pattern checks run first so the moderation call — a network round
     // trip — is only paid for once the free checks above have already passed.
-    const moderation = await checkModeration(message);
-    if (moderation.flagged) {
-        console.log(`[input_guardrail] blocked — message flagged by moderation: ${moderation.categories.join(", ")}`);
-        return {blocked: true, reason: "your message was flagged as potentially harmful"};
+    try {
+        const moderation = await checkModeration(message);
+        if (moderation.flagged) {
+            console.log(`[input_guardrail] blocked — message flagged by moderation: ${moderation.categories.join(", ")}`);
+            return {blocked: true, reason: "your message was flagged as potentially harmful"};
+        }
+    } catch (error) {
+        // Fail closed: if the moderation call itself errors (timeout, outage,
+        // rate limit), we can't confirm the message is safe, so we block rather
+        // than silently skip this layer and let it through unchecked.
+        console.error("[input_guardrail] moderation check failed, blocking", error);
+        return {blocked: true, reason: "your message couldn't be checked for safety right now"};
     }
 
     return {blocked: false};

@@ -42,4 +42,12 @@ describe("checkOutput", () => {
         expect(result.blocked).toBe(false);
         expect(create).not.toHaveBeenCalled();
     });
+
+    it("fails closed when the moderation call errors", async () => {
+        create.mockRejectedValue(new Error("moderation API unavailable"));
+
+        const result = await checkOutput("Here's the weather forecast for today.");
+
+        expect(result.blocked).toBe(true);
+    });
 });

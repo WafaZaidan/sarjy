@@ -100,7 +100,10 @@ export async function POST(request: Request) {
         })
 
     } catch (error) {
-        console.log('Oh no something went wrong', error)
+        console.error('[chat] request failed', error)
+        return NextResponse.json({
+            error: "Something went wrong. Please try again.",
+        }, {status: 500})
     }
 
 }
