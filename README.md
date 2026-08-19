@@ -39,17 +39,47 @@ at SarjAI given the nature of the product and the customer requests they'll be g
 
 ### What was built
 
+The pipeline now looks like: **policy prompt → input guardrail (regex + moderation) → LLM
+call → output guardrail (moderation) → response**, plus a separate PII check scoped to
+search queries specifically. Each layer is independent of the others, so a failure in one
+(e.g. the model ignoring the policy) doesn't remove the rest.
+
 **1. A safety policy prompt** (`lib/llm/instructions.ts`, `SAFETY_INSTRUCTIONS`). This is the
 first line of defence, sent to the model on every request. It covers 8 areas: refusing
 harmful requests, resisting jailbreaks, handling personal information, keeping private
 searches out of external tools, treating tool results as untrusted (not as instructions),
 staying factually grounded, scoping memory, and how to refuse.
 
-**2. A code-level PII check** (`lib/tools/brave-search.ts`). Before any search query reaches
-Brave, it's checked against regex patterns for emails and US-style phone numbers
-(`ddd-ddd-dddd`). A match blocks the search outright — the request to Brave is never sent —
-and gets logged for testing. This is a second layer that doesn't rely on the model, since a
-prompt alone can't guarantee it's always followed.
+**2. An input guardrail** (`lib/guardrails/input-guardrail.ts`), run on every raw user
+message before it reaches the LLM at all:
+- PII regex (emails, US-style phone numbers), shared with the tool-call check below via
+  `lib/guardrails/pii.ts` so the patterns live in one place.
+- Jailbreak regex for known phrasings (instruction override, system-prompt extraction,
+  persona override — e.g. "ignore all previous instructions", "you are now DAN").
+- OpenAI's Moderation API, for harmful-content categories (violence, self-harm, hate,
+  sexual, harassment) that the regexes were never going to generalize to.
+
+These run cheapest-first: the free regex checks run before the moderation network call, so
+a message that's already caught doesn't also pay for the round trip.
+
+Known limitation on the jailbreak regex: it only catches known phrasings, not creative
+rephrasings or novel jailbreak attempts. A more robust fix would be a dedicated
+classifier — either a small LLM-judge call or a purpose-built model (e.g. Meta's Prompt
+Guard) — trained to detect jailbreak *intent* rather than exact wording; left as a known
+gap given the time budget, since Moderation doesn't cover this category at all (it
+classifies harmful content, not attempts to manipulate the assistant).
+
+**3. An output guardrail** (`lib/guardrails/output-guardrail.ts`), run on the model's
+generated reply before it's returned to the user — the same Moderation API check as the
+input side, since the policy and input guardrail both act *before* generation and neither
+guarantees what the model actually says stays within bounds.
+
+**4. A code-level PII check on search queries** (`lib/tools/brave-search.ts`). Before any
+query reaches Brave, it's checked against the same PII regex as the input guardrail (now
+shared via `lib/guardrails/pii.ts`). A match blocks the search outright — the request to
+Brave is never sent — and gets logged for testing. This exists as a separate layer because
+the input guardrail only sees the user's raw message, not what the model decides to put
+into a tool call's arguments.
 
 Known limitation: the phone regex only covers the US format. I tested a UK-style number
 (`07700 900123`) and confirmed it slips past the code-level check — it only got blocked
@@ -74,4 +104,5 @@ generally; left as a known gap given the time budget.
 
 ## Stack
 
-Next.js, Supabase (auth + Postgres), OpenAI Responses API (`gpt-5-nano`), Brave Search API.
+Next.js, Supabase (auth + Postgres), OpenAI Responses API (`gpt-5-nano`), OpenAI Moderation
+API, Brave Search API.
