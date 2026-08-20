@@ -6,6 +6,45 @@ Sarjy is a browser-based voice assistant. Sign in, tap the mic, and talk — Sar
 the Web Speech API, replies with synthesized speech, and remembers what you've told it across
 sessions and conversations.
 
+## Getting Started
+
+**Requirements:** Node 20+, a [Supabase](https://supabase.com) project, an OpenAI API key, and
+(optionally) a [Brave Search](https://brave.com/search/api/) API key if you want web search
+enabled.
+
+```bash
+npm install
+cp .env.example .env   # fill in your Supabase, OpenAI, and (optional) Brave keys
+```
+
+Apply the database schema (from `supabase/migrations`) using either a hosted Supabase project
+or a fully local stack via the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started):
+
+**Option A — hosted Supabase project:**
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+**Option B — local Supabase (requires [Docker](https://www.docker.com/) running):**
+```bash
+supabase start   # spins up Postgres, Auth, Studio, etc. in Docker; applies migrations automatically
+```
+This prints a local `API URL` and `anon key` — use those for `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env` instead of a hosted project's values. Studio
+(a local dashboard for browsing tables/auth) is at `http://127.0.0.1:54323`. Stop it with
+`supabase stop`.
+
+Then:
+
+```bash
+npm run dev     # start the dev server at localhost:3000
+npm test        # run the unit test suite
+npm run lint    # lint
+npm run build   # production build
+npm start       # run the production build
+```
+
 ## Features
 
 - Voice in/out via the browser's `SpeechRecognition` and `SpeechSynthesis` APIs, with the mic
